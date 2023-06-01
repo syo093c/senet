@@ -11,3 +11,4 @@ So, train the model again with the best settings on full train dataset!
 SDG with moumment and step is not bad, adam overfitting?
 
 3. read timm and mmpretrain
+write your own framework!!
