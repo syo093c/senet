@@ -100,7 +100,7 @@ def ltrain():
 
 
 def main():
-    #ltrain()
+    #ltrain() #same result with test
     train()
     #test()
 
