@@ -12,10 +12,10 @@ class SENet_block(pl.LightningModule):
     def __init__(self,inplanes, planes,stride=1,downsample=None) -> None:
         super().__init__()
         self.conv_part1=nn.Sequential(
-                nn.Conv2d(inplanes,planes,kernel_size=3,stride=stride,padding=1),
+                nn.Conv2d(inplanes,planes,kernel_size=3,stride=stride,padding=1,bias=False),
                 nn.BatchNorm2d(planes),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(planes,planes,kernel_size=3,stride=1,padding=1),
+                nn.Conv2d(planes,planes,kernel_size=3,stride=1,padding=1,bias=False),
                 nn.BatchNorm2d(planes),
                 )
         self.downsample=downsample
@@ -29,7 +29,7 @@ class SENet_block(pl.LightningModule):
         residual = x
         out=self.conv_part1(x)
         if self.downsample is not None:
-            residual = self.downsample(residual)
+            residual = self.downsample(x)
 
         #SE Block
         original_out=out
@@ -63,13 +63,13 @@ class SE_ResNet(pl.LightningModule):
         self.fc = nn.Linear(64*block.expansion,num_classes)
 
         # init paramater
-        #for m in self.modules():
-        #    if isinstance(m,nn.Conv2d):
-        #        n = m.kernel_size[0]* m.kernel_size[1]*m.out_channels
-        #        m.weight.data.normal_(0,math.sqrt(2./n))
-        #    elif isinstance(m,nn.BatchNorm2d):
-        #        m.weight.data.fill_(1)
-        #        m.bias.data.zero_()
+        for m in self.modules():
+            if isinstance(m,nn.Conv2d):
+                n = m.kernel_size[0]* m.kernel_size[1]*m.out_channels
+                m.weight.data.normal_(0,math.sqrt(2./n))
+            elif isinstance(m,nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
 
     def _make_layer(self,block,planes,blocks,stride=1):
         downsample=None
@@ -102,20 +102,23 @@ class SE_ResNet(pl.LightningModule):
         return x
     
     def configure_optimizers(self):
-        #return torch.optim.Adam(self.parameters(),lr=1e-3,weight_decay=0.01)
-        return torch.optim.SGD(self.parameters(),lr=1e-1,momentum=0.1)
+        #optim=torch.optim.Adam(self.parameters(),lr=0.01,weight_decay=1e-4)
+        optim=torch.optim.SGD(self.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
+        schedu=torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[50, 75], gamma=0.1)
+        
+        return [optim],[schedu]
 
     def training_step(self,train_batch,train_idx):
         x,y=train_batch
         y_hat=self.forward(x)
-        loss= F.cross_entropy(y_hat,y)
+        loss= nn.CrossEntropyLoss()(y_hat,y)
         self.log('Train loss (CrossEntropyLoss):', loss)
         return loss
 
     def validation_step(self,val_batch,train_idx):
         x,y=val_batch
         y_hat=self.forward(x)
-        loss= F.cross_entropy(y_hat,y)
+        loss= nn.CrossEntropyLoss()(y_hat,y)
         self.log('Validation loss (CrossEntropyLoss):', loss)
 
 def test_SENet_block():
@@ -125,7 +128,7 @@ def test_SENet_block():
     b=block(a)
 
 def test_SE_ResNet():
-    net=SE_ResNet(2+6*40,10).cuda()
+    net=SE_ResNet(2+6*3,10).cuda()
     a=torch.zeros(1,3,100,100).cuda()
     b=net(a)
     summary(net,input_size=(1, 3, 150, 150))
